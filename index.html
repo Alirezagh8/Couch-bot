@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>برنامه ریزی و کوچینگ علیرضا</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
+    <style>
+        :root {
+            --tg-theme-bg-color: #ffffff;
+            --tg-theme-text-color: #000000;
+            --tg-theme-button-color: #2481cc;
+            --tg-theme-button-text-color: #ffffff;
+            --tg-theme-secondary-bg-color: #f0f0f0;
+        }
+        body {
+            font-family: Tahoma, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            margin: 0;
+            padding: 15px;
+            font-size: 14px;
+            padding-bottom: 80px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .days-tabs {
+            display: flex;
+            overflow-x: auto;
+            gap: 8px;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--tg-theme-secondary-bg-color);
+        }
+        .day-tab {
+            background-color: var(--tg-theme-secondary-bg-color);
+            color: var(--tg-theme-text-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            white-space: nowrap;
+            cursor: pointer;
+            border: none;
+        }
+        .day-tab.active {
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+        }
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .task-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: var(--tg-theme-secondary-bg-color);
+            padding: 12px;
+            border-radius: 10px;
+        }
+        .task-main {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .task-time {
+            font-weight: bold;
+            color: var(--tg-theme-button-color);
+        }
+        .task-title.done {
+            text-decoration: line-through;
+            opacity: 0.6;
+        }
+        .checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        .task-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn-action {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .no-task {
+            text-align: center;
+            color: gray;
+            margin-top: 30px;
+        }
+        .fab-add {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 56px;
+            height: 56px;
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border-radius: 50%;
+            border: none;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>🗓 برنامه هفتگی من</h2>
+    </div>
+
+    <div class="days-tabs" id="daysTabs"></div>
+    <div class="task-list" id="taskList"></div>
+
+    <button class="fab-add" onclick="addTask()">➕</button>
+
+    <script>
+        let sampleTasks = [];
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const tasksParam = urlParams.get('tasks');
+        
+        if (tasksParam) {
+            try {
+                sampleTasks = JSON.parse(decodeURIComponent(tasksParam));
+            } catch (e) {
+                console.error("خطا در بازخوانی دیتای سرور", e);
+                sampleTasks = []; 
+            }
+        }
+
+        const daysOrder = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"];
+        let currentDay = "شنبه";
+
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+
+        function renderTabs() {
+            const tabsContainer = document.getElementById('daysTabs');
+            tabsContainer.innerHTML = '';
+            daysOrder.forEach(day => {
+                const button = document.createElement('button');
+                button.className = `day-tab ${day === currentDay ? 'active' : ''}`;
+                button.innerText = day;
+                button.onclick = () => {
+                    currentDay = day;
+                    renderTabs();
+                    renderTasks();
+                };
+                tabsContainer.appendChild(button);
+            });
+        }
+
+        function renderTasks() {
+            const listContainer = document.getElementById('taskList');
+            listContainer.innerHTML = '';
+
+            let filtered = sampleTasks
+                .filter(t => t.day === currentDay)
+                .sort((a, b) => a.time.localeCompare(b.time));
+
+            if (filtered.length === 0) {
+                listContainer.innerHTML = `<div class="no-task">تسک یا برنامه‌ای برای ${currentDay} ثبت نشده است.</div>`;
+                return;
+            }
+
+            filtered.forEach(task => {
+                const item = document.createElement('div');
+                item.className = 'task-item';
+                item.innerHTML = `
+                    <div class="task-main">
+                        <input type="checkbox" class="checkbox" ${task.done ? 'checked' : ''} onchange="toggleTask(${task.id})">
+                        <span class="task-time">⏰ ${task.time}</span>
+                        <span class="task-title ${task.done ? 'done' : ''}">${task.title}</span>
+                    </div>
+                    <div class="task-actions">
+                        <button class="btn-action" onclick="editTask(${task.id})">✏️</button>
+                        <button class="btn-action" onclick="deleteTask(${task.id})">🗑</button>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+
+        function addTask() {
+            let title = prompt("عنوان برنامه جدید را وارد کنید:");
+            if (!title) return;
+            let timeStr = prompt("ساعت برنامه را وارد کنید (مثال 14:30 یا 08:15):", "12:00");
+            if (!timeStr) return;
+
+            let newId = sampleTasks.length ? Math.max(...sampleTasks.map(t => t.id)) + 1 : 1;
+            let newTask = { id: newId, day: currentDay, time: timeStr, title: title, done: false };
+            
+            sampleTasks.push(newTask);
+            renderTasks();
+
+            Telegram.WebApp.sendData(JSON.stringify({
+                action: "add",
+                title: title,
+                day: currentDay,
+                time: timeStr
+            }));
+
+            setTimeout(() => {
+                Telegram.WebApp.close();
+            }, 100);
+        }
+
+        function toggleTask(id) {
+            let task = sampleTasks.find(t => t.id === id);
+            if (task) {
+                task.done = !task.done;
+                renderTasks();
+                Telegram.WebApp.sendData(JSON.stringify({
+                    action: "toggle_done",
+                    task_id: id
+                }));
+                
+                setTimeout(() => {
+                    Telegram.WebApp.close();
+                }, 100);
+            }
+        }
+
+        function editTask(id) {
+            let task = sampleTasks.find(t => t.id === id);
+            if (task) {
+                let newTitle = prompt("عنوان جدید تسک:", task.title);
+                if (newTitle) {
+                    task.title = newTitle;
+                    renderTasks();
+                    Telegram.WebApp.sendData(JSON.stringify({
+                        action: "edit",
+                        task_id: id,
+                        title: newTitle,
+                        day: task.day,
+                        time: task.time
+                    }));
+                    
+                    setTimeout(() => {
+                        Telegram.WebApp.close();
+                    }, 100);
+                }
+            }
+        }
+
+        function deleteTask(id) {
+            if (confirm("آیا از حذف این برنامه مطمئن هستید؟")) {
+                sampleTasks = sampleTasks.filter(t => t.id !== id);
+                renderTasks();
+                Telegram.WebApp.sendData(JSON.stringify({
+                    action: "delete",
+                    task_id: id
+                }));
+
+                setTimeout(() => {
+                    Telegram.WebApp.close();
+                }, 100);
+            }
+        }
+
+        renderTabs();
+        renderTasks();
+    </script>
+</body>
+</html>
